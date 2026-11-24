@@ -118,3 +118,37 @@ func TestInvalidMsg(t *testing.T) {
 	badMessage[1] = 0x4 // ID = 4, RejectNotImplemented
 	write(badMessage)
 }
+
+func TestRejectDoesNotReflectRecursionAvailable(t *testing.T) {
+	// A FORMERR generated before the handler runs must not echo the
+	// request's RA bit: response RA advertises the server's recursion
+	// capability, not a client-supplied flag (RFC 1035 section 4.1.1).
+	HandleFunc("example.org.", func(ResponseWriter, *Msg) {
+		t.Error("the handler must not be called for a rejected message")
+	})
+	s, addrstr, _, err := RunLocalUDPServer(":0")
+	if err != nil {
+		t.Fatalf("unable to run test server: %v", err)
+	}
+	defer s.Shutdown()
+
+	c := new(Client)
+	for _, ra := range []bool{false, true} {
+		m := new(Msg)
+		m.SetQuestion("example.org.", TypeA)
+		// Two questions are rejected by DefaultMsgAcceptFunc.
+		m.Question = append(m.Question, Question{"example.org.", TypeA, ClassINET})
+		m.RecursionAvailable = ra
+
+		resp, _, err := c.Exchange(m, addrstr)
+		if err != nil {
+			t.Fatalf("exchange failed: %v", err)
+		}
+		if resp.Rcode != RcodeFormatError {
+			t.Fatalf("RA=%v: expected FORMERR, got %s", ra, RcodeToString[resp.Rcode])
+		}
+		if resp.RecursionAvailable {
+			t.Errorf("RA=%v: FORMERR response reflected the request's RA bit", ra)
+		}
+	}
+}

@@ -649,6 +649,10 @@ func (srv *Server) serveDNS(m []byte, w *response) {
 		opcode := req.Opcode
 		req.SetRcodeFormatError(req)
 		req.Zero = false
+		// RA advertises the server's recursion capability (RFC 1035
+		// section 4.1.1); the request's RA bit is client-controlled and
+		// must not be reflected in a response the handler never built.
+		req.RecursionAvailable = false
 		if action == MsgRejectNotImplemented {
 			req.Opcode = opcode
 			req.Rcode = RcodeNotImplemented
