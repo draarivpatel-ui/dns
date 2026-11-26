@@ -263,6 +263,41 @@ func TestServeIgnoresZFlag(t *testing.T) {
 	}
 }
 
+// Verify that a server-generated FormError response does not reflect the
+// request's RA bit: recursion availability is a server capability.
+func TestServeFormErrorClearsRecursionAvailable(t *testing.T) {
+	HandleFunc("example.com.", AnotherHelloServer)
+
+	s, addrstr, _, err := RunLocalUDPServer(":0")
+	if err != nil {
+		t.Fatalf("unable to run test server: %v", err)
+	}
+	defer s.Shutdown()
+
+	c := new(Client)
+	m := new(Msg)
+
+	// Two questions make the server reject the message with a FormError
+	// before the handler runs.
+	m.SetQuestion("example.com.", TypeTXT)
+	m.Question = append(m.Question, Question{"example.org.", TypeTXT, ClassINET})
+	m.RecursionAvailable = true
+	m.RecursionDesired = true
+	r, _, err := c.Exchange(m, addrstr)
+	if err != nil {
+		t.Fatal("failed to exchange example.com with two questions", err)
+	}
+	if r.Rcode != RcodeFormatError {
+		t.Errorf("expected rcode %v, got %v", RcodeFormatError, r.Rcode)
+	}
+	if r.RecursionAvailable {
+		t.Error("the response should not have the RA bit set - even for a query which does")
+	}
+	if !r.RecursionDesired {
+		t.Error("the response should copy the RD bit from the query")
+	}
+}
+
 // Verify that the server responds to a query with unsupported Opcode with a NotImplemented error and that Opcode is unchanged.
 func TestServeNotImplemented(t *testing.T) {
 	HandleFunc("example.com.", AnotherHelloServer)

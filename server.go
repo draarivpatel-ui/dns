@@ -649,6 +649,11 @@ func (srv *Server) serveDNS(m []byte, w *response) {
 		opcode := req.Opcode
 		req.SetRcodeFormatError(req)
 		req.Zero = false
+		// The request message is reused for the error response, but the
+		// RA bit is a server capability, not a value to reflect: the
+		// library-generated error bypasses the handler, so no recursive
+		// service backs it.
+		req.RecursionAvailable = false
 		if action == MsgRejectNotImplemented {
 			req.Opcode = opcode
 			req.Rcode = RcodeNotImplemented
